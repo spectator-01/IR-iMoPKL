@@ -1,4 +1,5 @@
 ## ***Language-driven Motion Prior Knowledge Learning for Moving Infrared Small Target Detection***
+### **此处仅用于个人毕设，需了解该项目请前往[UESTC-nnLab](https://github.com/UESTC-nnLab/MoPKL)**
 
 This project is a substantial improvement and extension version of our
 **MoPKL** ***(Motion Prior Knowledge Learning with Homogeneous Language Descriptions for Moving Infrared Small Target Detection)***, published in the proceedings of the **39th AAAI Conference on Artificial Intelligence (AAAI’25)**.

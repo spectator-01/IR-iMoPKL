@@ -152,7 +152,7 @@ def describe(obj, indent=0, max_depth=2):
     else:
         print(pad + f'{type(obj).__name__}: {repr(obj)[:80]}')
 
-pkl_file = 'mediate_data/emb_train_ITSDT.pkl'
+pkl_file = 'mediate_data/motion_relation_DAUB.pkl'
 data = pickle.load(open(pkl_file,'rb'))
 
 print('类型：', type(data))
