@@ -136,7 +136,8 @@ class EvalCallback():
             top_conf    = results[0][:, 4] * results[0][:, 5]
             top_boxes   = results[0][:, :4]
 
-        top_100     = np.argsort(top_label)[::-1][:self.max_boxes]
+        # Keep highest-confidence detections, not class-id order.
+        top_100     = np.argsort(top_conf)[::-1][:self.max_boxes]
         top_boxes   = top_boxes[top_100]
         top_conf    = top_conf[top_100]
         top_label   = top_label[top_100]
@@ -167,7 +168,14 @@ class EvalCallback():
             print("Get map.")
             for annotation_line in tqdm(self.val_lines):
                 line        = annotation_line.split()
-                image_id    = "-".join(line[0].split("/")[6:8]).split('.')[0]  
+                norm_path   = line[0].replace("\\", "/")
+                parts       = norm_path.split("/")
+                # Use the last two path parts (folder + filename stem) to avoid id collision.
+                # e.g. DAUB/data13/358.bmp -> data13-358
+                if len(parts) >= 2:
+                    image_id = f"{parts[-2]}-{os.path.splitext(parts[-1])[0]}"
+                else:
+                    image_id = os.path.splitext(parts[-1])[0]
                 # cb update
                 images = self.get_history_imgs(line[0])
                 images = [Image.open(item) for item in images]

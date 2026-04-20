@@ -227,14 +227,49 @@ def dataset_collate(batch):
     multi_boxes = []
     relations = []
     paths = []
-    for img, box, caption, multi_box, relation, path in batch:
+    is_labeled = []
+    for sample in batch:
+        if len(sample) == 7:
+            img, box, caption, multi_box, relation, path, labeled = sample
+        else:
+            img, box, caption, multi_box, relation, path = sample
+            labeled = True
         images.append(img)
         bboxes.append(box)
         captions.append(caption) 
         multi_boxes.append(multi_box) 
         relations.append(relation)
         paths.append(path)
+        is_labeled.append(labeled)
     images = torch.from_numpy(np.array(images)).type(torch.FloatTensor)
     bboxes = [torch.from_numpy(ann).type(torch.FloatTensor) for ann in bboxes]
     
-    return images, bboxes, captions, multi_boxes, relations, paths
+    return images, bboxes, captions, multi_boxes, relations, paths, is_labeled
+
+
+# 半监督模式数据集加载
+class SemiSeqDataset(Dataset):
+    def __init__(self, dataset_path, image_size, num_frame=5, type='train',
+                 labeled_ratio=0.7, seed=2026):
+        super(SemiSeqDataset, self).__init__()
+        self.base = seqDataset(dataset_path, image_size, num_frame=num_frame, type=type)
+        self.length = len(self.base)
+
+        rng = np.random.RandomState(seed)
+        indices = np.arange(self.length)
+        rng.shuffle(indices)
+        num_labeled = int(self.length * labeled_ratio)
+        labeled_set = set(indices[:num_labeled].tolist())
+        self.is_labeled = np.array([i in labeled_set for i in range(self.length)], dtype=np.bool_)
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, index):
+        images, box, caption_data, multi_box, relation, path = self.base[index]
+        labeled = bool(self.is_labeled[index])
+        # 隐藏标签信息
+        if not labeled:
+            box = np.empty((0, 5), dtype=np.float32)
+            multi_box = None
+        return images, box, caption_data, multi_box, relation, path, labeled

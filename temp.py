@@ -122,67 +122,70 @@
 
 
 
+# # 熟悉数据
+# import pickle, os, pprint
+# import numpy as np
 
-import pickle, os, pprint
-import numpy as np
+# def describe(obj, indent=0, max_depth=2):
+#     """打印对象的简单描述（递归最多 max_depth 层）"""
+#     pad = '  ' * indent
+#     if max_depth < 0:
+#         print(pad + '...')
+#         return
+#     if isinstance(obj, dict):
+#         print(pad + f'dict, {len(obj)} keys')
+#         for i,(k,v) in enumerate(obj.items()):
+#             if i >= 5: 
+#                 print(pad + '  ...')
+#                 break
+#             print(pad + '  key:', repr(k))
+#             describe(v, indent+2, max_depth-1)
+#     elif isinstance(obj, (list, tuple)):
+#         print(pad + f'{type(obj).__name__}, len={len(obj)}')
+#         for i,v in enumerate(obj):
+#             if i >= 3:
+#                 print(pad + '  ...')
+#                 break
+#             describe(v, indent+1, max_depth-1)
+#     elif isinstance(obj, np.ndarray):
+#         print(pad + f'numpy.ndarray, shape={obj.shape}, dtype={obj.dtype}')
+#     else:
+#         print(pad + f'{type(obj).__name__}: {repr(obj)[:80]}')
 
-def describe(obj, indent=0, max_depth=2):
-    """打印对象的简单描述（递归最多 max_depth 层）"""
-    pad = '  ' * indent
-    if max_depth < 0:
-        print(pad + '...')
-        return
-    if isinstance(obj, dict):
-        print(pad + f'dict, {len(obj)} keys')
-        for i,(k,v) in enumerate(obj.items()):
-            if i >= 5: 
-                print(pad + '  ...')
-                break
-            print(pad + '  key:', repr(k))
-            describe(v, indent+2, max_depth-1)
-    elif isinstance(obj, (list, tuple)):
-        print(pad + f'{type(obj).__name__}, len={len(obj)}')
-        for i,v in enumerate(obj):
-            if i >= 3:
-                print(pad + '  ...')
-                break
-            describe(v, indent+1, max_depth-1)
-    elif isinstance(obj, np.ndarray):
-        print(pad + f'numpy.ndarray, shape={obj.shape}, dtype={obj.dtype}')
-    else:
-        print(pad + f'{type(obj).__name__}: {repr(obj)[:80]}')
+# pkl_file = 'mediate_data/motion_relation_DAUB.pkl'
+# data = pickle.load(open(pkl_file,'rb'))
 
-pkl_file = 'mediate_data/motion_relation_DAUB.pkl'
-data = pickle.load(open(pkl_file,'rb'))
+# print('类型：', type(data))
+# print('样本数量：', len(data))
 
-print('类型：', type(data))
-print('样本数量：', len(data))
+# # 打印前若干个 key 和对应 value 的详细信息
+# for i,(k,v) in enumerate(data.items()):
+#     if i >= 10: break
+#     print('---- entry', i, '----')
+#     print('key:', repr(k))
+#     describe(v, indent=1, max_depth=3)
+#     print()
 
-# 打印前若干个 key 和对应 value 的详细信息
-for i,(k,v) in enumerate(data.items()):
-    if i >= 10: break
-    print('---- entry', i, '----')
-    print('key:', repr(k))
-    describe(v, indent=1, max_depth=3)
-    print()
+# # 统计一下所有 value 的类型出现频率
+# type_count = {}
+# for v in data.values():
+#     t = type(v)
+#     type_count[t] = type_count.get(t,0) + 1
+# print('value 类型分布:')
+# pprint.pprint(type_count)
 
-# 统计一下所有 value 的类型出现频率
-type_count = {}
-for v in data.values():
-    t = type(v)
-    type_count[t] = type_count.get(t,0) + 1
-print('value 类型分布:')
-pprint.pprint(type_count)
+# # 如果 value 中包含可以转换为 numpy 数组的内容,
+# # 还可以把它们的形状、最小/最大/均值打印出来:
+# for i,(k,v) in enumerate(data.items()):
+#     if hasattr(v, 'shape') or isinstance(v, (list, tuple, np.ndarray)):
+#         arr = np.array(v)
+#         print(f'[{i}]', k, '->', arr.shape, arr.dtype,
+#               'min', arr.min() if arr.size else None,
+#               'max', arr.max() if arr.size else None,
+#               'mean', arr.mean() if arr.size else None)
+#     if i>=5: 
+#         print(arr)
+#         break
 
-# 如果 value 中包含可以转换为 numpy 数组的内容,
-# 还可以把它们的形状、最小/最大/均值打印出来:
-for i,(k,v) in enumerate(data.items()):
-    if hasattr(v, 'shape') or isinstance(v, (list, tuple, np.ndarray)):
-        arr = np.array(v)
-        print(f'[{i}]', k, '->', arr.shape, arr.dtype,
-              'min', arr.min() if arr.size else None,
-              'max', arr.max() if arr.size else None,
-              'mean', arr.mean() if arr.size else None)
-    if i>=5: 
-        print(arr)
-        break
+
+# 查看log

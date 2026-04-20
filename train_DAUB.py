@@ -1,5 +1,6 @@
 import datetime
 import os,random
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
@@ -13,7 +14,7 @@ from nets.training import (ModelEMA, YOLOLoss, get_lr_scheduler,
                                 set_optimizer_lr, weights_init)
 from utils.callbacks import EvalCallback, LossHistory
 from utils.dataloader import YoloDataset
-from utils.dataloader_for_DAUB import seqDataset, dataset_collate
+from utils.dataloader_for_DAUB import seqDataset, SemiSeqDataset, dataset_collate
 from utils.utils import get_classes, show_config
 from utils.utils_fit import fit_one_epoch
 
@@ -53,38 +54,80 @@ if __name__ == "__main__":
     # train_annotation_path = 'DAUB/train.txt'
     # val_annotation_path = 'DAUB/val.txt'
     Cuda            = True
+    # 是否分布式
     distributed     = False
+    # 分布式相关参数
     sync_bn         = False
+    # 半精度
     fp16            = False
+    # 
     classes_path    = 'model_data/classes.txt'
+    # 预训练权重路径
     model_path      = 'model_data/pre_trained_backbone.pth'
+    # 输入图像大小
     input_shape     = [512, 512]
+    # 
     phi             = 's'
+    # 数据增强相关参数
     mosaic              = False
     mosaic_prob         = 0.5
     mixup               = False
     mixup_prob          = 0.5
     special_aug_ratio   = 0.7
+    # 起始Epouch
     Init_Epoch          = 0
+    # 冻结训练的Epouch数
     Freeze_Epoch        = 0
     Freeze_batch_size   = 4
-    UnFreeze_Epoch      = 30
+    # 总训练Epouch数
+    UnFreeze_Epoch      = 50
     Unfreeze_batch_size = 4
+    # 是否冻结训练
     Freeze_Train        = False
+    # 初始学习率
     Init_lr             = 1e-2 
+    # 最小学习率
     Min_lr              = Init_lr * 0.01
+    # 优化器类型
     optimizer_type      = "sgd" 
+    # 动量系数
     momentum            = 0.937
+    # 权重衰减系数（L2正则化）
     weight_decay        = 5e-4
+    # 学习率衰减方式
     lr_decay_type       = "cos"
+    # 保存间隔
     save_period         = 1
     save_dir            = 'logs'
+    # 是否评估
     eval_flag           = True
-    eval_period         = 30
-    # TODO test
-    num_workers         = 4
+    # 评估间隔
+    eval_period         = 25
+    # 子进程数
+    num_workers         = 8
     train_annotation_path = r'DAUB/train.txt'
     val_annotation_path = r'DAUB/val.txt'
+
+    # 半监督训练相关参数
+    # 是否使用半监督训练
+    semi_supervised = True
+    # 使用伪标签的样本占比
+    labeled_ratio = 0.7
+    semi_seed = 2026
+    # 伪标签生成的置信度阈值
+    pseudo_conf_thres = 0.7
+    # 伪标签生成的NMS阈值
+    pseudo_nms_thres = 0.4
+    # 伪标签的损失权重
+    pseudo_weight = 0.5
+    # 无标签分支的语言一致性损失权重
+    unsup_lang_weight = 1.0
+    # 伪标签生成时的最小框大小
+    pseudo_min_box = 1
+    # 是否使用空伪标签
+    pseudo_use_empty = False
+    
+    
     
     
     ngpus_per_node  = torch.cuda.device_count()
@@ -191,6 +234,7 @@ if __name__ == "__main__":
             classes_path = classes_path, model_path = model_path, input_shape = input_shape, \
             Init_Epoch = Init_Epoch, Freeze_Epoch = Freeze_Epoch, UnFreeze_Epoch = UnFreeze_Epoch, Freeze_batch_size = Freeze_batch_size, Unfreeze_batch_size = Unfreeze_batch_size, Freeze_Train = Freeze_Train, \
             Init_lr = Init_lr, Min_lr = Min_lr, optimizer_type = optimizer_type, momentum = momentum, lr_decay_type = lr_decay_type, \
+            semi_supervised = semi_supervised, labeled_ratio = labeled_ratio, pseudo_conf_thres = pseudo_conf_thres, pseudo_weight = pseudo_weight, unsup_lang_weight = unsup_lang_weight, \
             save_period = save_period, save_dir = log_dir, num_workers = num_workers, num_train = num_train, num_val = num_val
         )
         
@@ -252,7 +296,10 @@ if __name__ == "__main__":
         if ema:
             ema.updates     = epoch_step * Init_Epoch
         
-        train_dataset = seqDataset(train_annotation_path, input_shape[0], 2, 'train')
+        if semi_supervised:
+            train_dataset = SemiSeqDataset(train_annotation_path, input_shape[0], 2, 'train', labeled_ratio=labeled_ratio, seed=semi_seed)
+        else:
+            train_dataset = seqDataset(train_annotation_path, input_shape[0], 2, 'train')
         val_dataset = seqDataset(val_annotation_path, input_shape[0], 2, 'val')
 
         if distributed:
@@ -325,7 +372,9 @@ if __name__ == "__main__":
 
             set_optimizer_lr(optimizer, lr_scheduler_func, epoch)
 
-            fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callback, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, UnFreeze_Epoch, Cuda, fp16, scaler, save_period, log_dir, local_rank)
+            fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callback, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, UnFreeze_Epoch, Cuda, fp16, scaler, save_period, log_dir, local_rank,
+                          semi_supervised=semi_supervised, pseudo_conf_thres=pseudo_conf_thres, pseudo_nms_thres=pseudo_nms_thres, pseudo_weight=pseudo_weight,
+                          pseudo_min_box=pseudo_min_box, pseudo_use_empty=pseudo_use_empty, unsup_lang_weight=unsup_lang_weight)
 
             if distributed:
                 dist.barrier()

@@ -121,7 +121,7 @@ class seqDataset(Dataset):
         
         # fTODO change
         try:
-            images, box = self.get_data(index)
+            images, box, path = self.get_data(index)
         except Exception as e:
             fn = self.img_idx[index]
             print(f"[seqDataset] error reading index={index}, file='{fn}': {e}")
@@ -151,7 +151,7 @@ class seqDataset(Dataset):
         relation = np.array(relation)
         # caption_data = np.array(caption)
         # print(caption_data)
-        return images, box, caption_data, multi_box, relation #################
+        return images, box, caption_data, multi_box, relation, path #################
 
     ###################################################
     def get_caption_data(self, index):
@@ -295,6 +295,7 @@ class seqDataset(Dataset):
         image_id = int(file_name.split("/")[-1][:-4])
         image_path = file_name.replace(file_name.split("/")[-1], '').lstrip('/')
         label_data = self.anno_idx[index]  # 4+1
+        path = image_path + '%d.bmp' % image_id
 
         
         for id in range(0, self.num_frame):
@@ -351,7 +352,7 @@ class seqDataset(Dataset):
         label_data = np.array(label_data, dtype=np.float32) # [:,5]
         
         # print('!!!!!!!!!!!!!!!!!', file_name)
-        return image_data, label_data#, multi_frame_label
+        return image_data, label_data, path#, multi_frame_label
                     
 def dataset_collate(batch):
     images = []
@@ -359,14 +360,53 @@ def dataset_collate(batch):
     captions = [] #####################
     multi_boxes = []
     relations = []
-    for img, box, caption, multi_box, relation in batch:
+    paths = []
+    is_labeled = []
+    for sample in batch:
+        if len(sample) == 7:
+            img, box, caption, multi_box, relation, path, labeled = sample
+        elif len(sample) == 6:
+            img, box, caption, multi_box, relation, path = sample
+            labeled = True
+        else:
+            img, box, caption, multi_box, relation = sample
+            path = None
+            labeled = True
         images.append(img)
         bboxes.append(box)
         captions.append(caption) ###############################
         multi_boxes.append(multi_box) ###############################
         relations.append(relation)
+        paths.append(path)
+        is_labeled.append(labeled)
     images = torch.from_numpy(np.array(images)).type(torch.FloatTensor)
     bboxes = [torch.from_numpy(ann).type(torch.FloatTensor) for ann in bboxes]
     # multi_boxes = [torch.from_numpy(ann).type(torch.FloatTensor) for ann in multi_boxes]
     
-    return images, bboxes, captions, multi_boxes, relations
+    return images, bboxes, captions, multi_boxes, relations, paths, is_labeled
+
+
+class SemiSeqDataset(Dataset):
+    def __init__(self, dataset_path, image_size, num_frame=5, type='train',
+                 labeled_ratio=0.7, seed=2026):
+        super(SemiSeqDataset, self).__init__()
+        self.base = seqDataset(dataset_path, image_size, num_frame=num_frame, type=type)
+        self.length = len(self.base)
+
+        rng = np.random.RandomState(seed)
+        indices = np.arange(self.length)
+        rng.shuffle(indices)
+        num_labeled = int(self.length * labeled_ratio)
+        labeled_set = set(indices[:num_labeled].tolist())
+        self.is_labeled = np.array([i in labeled_set for i in range(self.length)], dtype=np.bool_)
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, index):
+        images, box, caption_data, multi_box, relation, path = self.base[index]
+        labeled = bool(self.is_labeled[index])
+        if not labeled:
+            box = np.empty((0, 5), dtype=np.float32)
+            multi_box = None
+        return images, box, caption_data, multi_box, relation, path, labeled

@@ -61,20 +61,23 @@ class MotionModel(nn.Module):
         heatmap = heatmap.squeeze(1)         
         return heatmap
 
-    def train_forward(self, motion_prior, feats, descriptions, alpha=1.0, beta=1.0):
+    def text_motion_forward(self, descriptions, sample=False):
         B = descriptions.size(0)
-        
-        # --- Text Branch ---
         x_text = descriptions.view(B, -1)
-        
-        # TODO error: x_text: 4x6000 and text_fc1: 39000x1024
         h_text = F.relu(self.text_fc1(x_text))
         mu = self.text_fc_mu(h_text)
         logvar = self.text_fc_logvar(h_text)
-        z = self.reparameterize(mu, logvar) 
-        kl_loss = 0.5 * torch.sum(torch.exp(logvar) + mu**2 - 1. - logvar)
+        z = self.reparameterize(mu, logvar) if sample else mu
+        motion_text = self.decode_heatmap(z)
+        return motion_text, mu, logvar, z
+
+    def train_forward(self, motion_prior, feats, descriptions, alpha=1.0, beta=1.0):
+        B = descriptions.size(0)
+
+        # --- Text Branch ---
+        motion_text, mu, logvar, z = self.text_motion_forward(descriptions, sample=True)
+        kl_loss = 0.5 * torch.sum(torch.exp(logvar) + mu ** 2 - 1. - logvar)
         kl_loss = kl_loss / (B * mu.size(1))
-        motion_text = self.decode_heatmap(z) 
         text_recon_loss = F.mse_loss(motion_text, motion_prior)
 
         # --- Visual Branch ---
@@ -227,7 +230,7 @@ class MoPKL(nn.Module):
         DAUB-R: 20*300
         IRDST-H: 20*300
         """
-        self.motion = MotionModel(text_input_dim=130*300, latent_dim=128, hidden_dim=1024)
+        self.motion = MotionModel(text_input_dim=20*300, latent_dim=128, hidden_dim=1024)
 
         
         self.GAT = GATNet(
@@ -254,7 +257,7 @@ class MoPKL(nn.Module):
         B, N, W, H = f_feats.shape
         feats = self.conv_vl(torch.cat(feat,1)).squeeze(1)
 
-        if self.training: 
+        if self.training and (descriptions is not None) and (multi_targets is not None) and (relation is not None):
             # Language-Driven Motion Alignment
             multi_targets = [mt.cuda() if isinstance(mt, torch.Tensor) else mt for mt in multi_targets]
             motion_prior = generate_motion(multi_targets, inputs,
@@ -273,8 +276,23 @@ class MoPKL(nn.Module):
             h_j = h.unsqueeze(1)
             pred_relation = torch.sum(h_i * h_j, dim=-1)
             loss_relation = F.mse_loss(pred_relation, relation.squeeze(1))
+        elif self.training and (descriptions is not None) and (relation is not None):
+            # Unlabeled branch: language-consistency + relation learning without bbox supervision.
+            motion = self.motion.inference_forward(feats)
+            text_motion, _, _, _ = self.motion.text_motion_forward(descriptions[:, -1, :, :], sample=False)
+            loss_alignment = F.mse_loss(motion, text_motion.detach())
+
+            v_feat = self.vf(feats)
+            v_feat = rearrange(v_feat, 'b n w h -> b n (w h)', b=B, n=16, w=32, h=32)
+            h = self.GAT(v_feat, relation.squeeze(1))
+            h_i = h.unsqueeze(2)
+            h_j = h.unsqueeze(1)
+            pred_relation = torch.sum(h_i * h_j, dim=-1)
+            loss_relation = F.mse_loss(pred_relation, relation.squeeze(1))
         else:
             motion = self.motion.inference_forward(feats)
+            loss_alignment = feats.new_tensor(0.0)
+            loss_relation = feats.new_tensor(0.0)
 
         motion = self.conv_m(motion.unsqueeze(1))    
         feat = self.fusion(motion, feat[-1])

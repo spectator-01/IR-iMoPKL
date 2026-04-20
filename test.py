@@ -27,8 +27,8 @@ temp_save_path      = 'map_out/coco_eval'
 class MAP_vid(object):
     _defaults = {
         
-        "model_path"        : '/home/chenshengjia/iMoPKL/logs/ITSDT_80.67_90.35.pth',
-        "classes_path"      : 'model_data/classes.txt',
+        "model_path"        : r'logs/ITSDT_80.67_90.35.pth',
+        "classes_path"      : r'model_data/classes.txt',
         "input_shape"       : [512, 512],
         "phi"               : 's',
         "confidence"        : 0.5,
